@@ -6,36 +6,36 @@ from tools import _
 
 common_params = ["--source", "winget", "--accept-source-agreements"]
 
-
+#winget = "powershell -ExecutionPolicy ByPass -Command [Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
+winget = "chcp 65001 && mode con: cols=500 && "
 if getSettings("UseSystemWinget"):
-    winget = "winget.exe"
+    winget = winget + " winget.exe"
 else:
-    winget = os.path.join(os.path.join(realpath, "winget-cli"), "winget.exe")
+    winget = winget + " winget-cli/winget.exe"
+    # winget = f"{winget} {0}".format(os.path.abspath(f"{realpath}/winget-cli/winget.exe"));
 
 
 def searchForPackage(signal: Signal, finishSignal: Signal, noretry: bool = False) -> None:
-    print(f"🟢 Starting winget search, winget on {winget}...")
-    p = subprocess.Popen(["mode", "400,30&", winget, "search", ""] + common_params ,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True)
+    print(f"🟢 Starting winget search...")
+    #p = subprocess.Popen(["mode", "400,30&", "winget.exe", "search", ""] + common_params ,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True)
+    p = subprocess.Popen(f"{winget} search \"\" {' '.join(common_params)}", stderr=subprocess.STDOUT, env=os.environ.copy(), shell=True, encoding="utf-8")
     output = []
     counter = 0
     idSeparator = 0
-    while p.poll() is None:
-        line = p.stdout.readline()
-        line = line.strip()
-        if line:
-            if(counter > 0):
-                output.append(str(line, encoding='utf-8', errors="ignore"))
-            else:
-                l = str(line, encoding='utf-8', errors="ignore").replace("\x08-\x08\\\x08|\x08 \r","")
-                l = l.split("\r")[-1]
-                if("Id" in l):
-                    idSeparator = len(l.split("Id")[0])
-                    verSeparator = idSeparator+2
-                    i=0
-                    while l.split("Id")[1].split(" ")[i] == "":
-                        verSeparator += 1
-                        i += 1
-                    counter += 1
+    for line in p.stdout.readlines():
+        if(counter > 0):
+            output.append(line)
+        else:
+            l = line.replace("\x08-\x08\\\x08|\x08 \r","")
+            l = l.split("\r")[-1]
+            if("Id" in l):
+                idSeparator = len(l.split("Id")[0])
+                verSeparator = idSeparator+2
+                i=0
+                while l.split("Id")[1].split(" ")[i] == "":
+                    verSeparator += 1
+                    i += 1
+                counter += 1
     print(p.stdout)
     print(p.stderr)
     if p.returncode != 0 and not noretry:
@@ -46,7 +46,7 @@ def searchForPackage(signal: Signal, finishSignal: Signal, noretry: bool = False
         counter = 0
         for element in output:
             try:
-                verElement = element[idSeparator:].strip()
+                verElement = element[idSeparator:]
                 verElement.replace("\t", " ")
                 while "  " in verElement:
                     verElement = verElement.replace("  ", " ")
@@ -63,33 +63,28 @@ def searchForPackage(signal: Signal, finishSignal: Signal, noretry: bool = False
                         ver = verElement.split(" ")[iOffset+1]
                     except IndexError:
                         ver = "Unknown"
-                if ver.strip() in ("<", "-", ""):
+                if ver in ("<", "-", ""):
                     iOffset += 1
                     ver = verElement.split(" ")[iOffset+1]
-                if not "  " in element[0:idSeparator].strip():
-                    signal.emit(element[0:idSeparator].strip(), id, ver, "Winget")
+                if not "  " in element[0:idSeparator]:
+                    signal.emit(element[0:idSeparator], id, ver, "Winget")
                 else:
-                    print(f"🟡 package {element[0:idSeparator].strip()} failed parsing, going for method 2...")
-                    element = bytes(element, "utf-8")
+                    print(f"🟡 package {element[0:idSeparator]} failed parsing, going for method 2...")
                     print(element, verSeparator)
-                    export = (element[0:idSeparator], str(element[idSeparator:], "utf-8").strip().split(" ")[0], list(filter(None, str(element[idSeparator:], "utf-8").strip().split(" ")))[1])
-                    signal.emit(str(export[0], "utf-8").strip(), export[1], export[2], "Winget")
+                    export = (element[0:idSeparator], element[idSeparator:].split(" ")[0], list(filter(None, element[idSeparator:].split(" ")))[1])
+                    signal.emit(export[0], export[1], export[2], "Winget")
             except Exception as e:
                 try:
                     report(e)
-                    try:
-                        element = str(element, "utf-8")
-                    except Exception as e:
-                        print(e)
-                    signal.emit(element[0:idSeparator].strip(), element[idSeparator:verSeparator].strip(), element[verSeparator:].split(" ")[0].strip(), "Winget")
+                    signal.emit(element[0:idSeparator], element[idSeparator:verSeparator], element[verSeparator:].split(" ")[0], "Winget")
                 except Exception as e:
                     report(e)
         print("🟢 Winget search finished")
         finishSignal.emit("winget")  # type: ignore
 
 def searchForOnlyOnePackage(id: str) -> tuple[str, str]:
-    print(f"🟢 Starting winget search, winget on {winget}...")
-    p = subprocess.Popen(["mode", "400,30&", winget, "search", "--id", id.replace("…", "")] + common_params ,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True)
+    print(f"🟢 Starting winget search id {id}...")
+    p = subprocess.Popen(f"{winget} search --id {id.replace('…', '')} {' '.join(common_params)}", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, env=os.environ.copy(), shell=True, encoding="utf-8")
     counter = 0
     idSeparator = 0
     while p.poll() is None:
@@ -97,10 +92,10 @@ def searchForOnlyOnePackage(id: str) -> tuple[str, str]:
         line = line.strip()
         if line:
             if(counter > 0):
-                if not b"---" in line:
-                    return str(line[:idSeparator], "utf-8", errors="ignore").strip(), str(line[idSeparator:], "utf-8", errors="ignore").split(" ")[0].strip()
+                if not "---" in line:
+                    return str(line[:idSeparator], errors="ignore").strip(), str(line[idSeparator:], errors="ignore").split(" ")[0].strip()
             else:
-                l = str(line, encoding='utf-8', errors="ignore").replace("\x08-\x08\\\x08|\x08 \r","")
+                l = str(line, errors="ignore").replace("\x08-\x08\\\x08|\x08 \r","")
                 l = l.split("\r")[-1]
                 if("Id" in l):
                     idSeparator = len(l.split("Id")[0])
@@ -113,29 +108,32 @@ def searchForOnlyOnePackage(id: str) -> tuple[str, str]:
     return (id, id)
 
 def searchForUpdates(signal: Signal, finishSignal: Signal, noretry: bool = False) -> None:
-    print(f"🟢 Starting winget search, winget on {winget}...")
-    p = subprocess.Popen(["mode", "400,30&", winget, "upgrade", "--include-unknown"] + common_params[0:2], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True)
-    output = []
+    print(f"🟢 Starting winget upgrade...")
+    p = subprocess.Popen(f"{winget} upgrade --include-unknown {' '.join(common_params[0:2])}", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True, encoding="utf-8")
+    output: list[str] = []
     counter = 0
     idSeparator = 0
+    print("AAA")
+    # print(f"upgrade {p.stdout.readlines()}")
     while p.poll() is None:
-        line = p.stdout.readline()  # type: ignore
-        line = line.strip()
+        line = p.stdout.readline().strip()
+        print(line)
         if line:
             if(counter > 0):
-                if not b"upgrades available" in line:
+                if not "upgrades available" in line:
                     output.append(line)
             else:
-                l = str(line, encoding='utf-8', errors="ignore").replace("\x08-\x08\\\x08|\x08 \r","")
+                l = line.replace("\x08-\x08\\\x08|\x08 \r","")
                 for char in ("\r", "/", "|", "\\", "-"):
-                    l = l.split(char)[-1].strip()
+                    l = l.split(char)[-1]
                 print(l)
                 if("Id" in l):
                     idSeparator = len(l.split("Id")[0])
                     verSeparator = len(l.split("Version")[0])
                     newVerSeparator = len(l.split("Available")[0])
                     counter += 1
-    
+    print("BBB")
+
     if p.returncode != 0 and not noretry:
         time.sleep(1)
         print(p.returncode)
@@ -144,8 +142,7 @@ def searchForUpdates(signal: Signal, finishSignal: Signal, noretry: bool = False
         counter = 0
         for element in output:
             try:
-                element = str(element, "utf-8", errors="ignore")
-                verElement = element[idSeparator:].strip()
+                verElement = element[idSeparator:]
                 verElement.replace("\t", " ")
                 while "  " in verElement:
                     verElement = verElement.replace("  ", " ")
@@ -158,32 +155,30 @@ def searchForUpdates(signal: Signal, finishSignal: Signal, noretry: bool = False
                     id = verElement.split(" ")[iOffset+0]
                     newver = verElement.split(" ")[iOffset+2]
                     ver = verElement.split(" ")[iOffset+1]
-                if ver.strip() in ("<", ">", "-"):
+                if ver in ("<", ">", "-"):
                     iOffset += 1
                     ver = verElement.split(" ")[iOffset+1]
                     newver = verElement.split(" ")[iOffset+2]
-                if not "  " in element[0:idSeparator].strip():
-                    signal.emit(element[0:idSeparator].strip(), id, ver, newver, "Winget")
+                if not "  " in element[0:idSeparator]:
+                    signal.emit(element[0:idSeparator], id, ver, newver, "Winget")
                 else:
-                    print(f"🟡 package {element[0:idSeparator].strip()} failed parsing, going for method 2...")
+                    print(f"🟡 package {element[0:idSeparator]} failed parsing, going for method 2...")
                     print(element, verSeparator)
-                    name = element[0:idSeparator].strip().replace("  ", "#").replace("# ", "#").replace(" #", "#")
+                    name = element[0:idSeparator].replace("  ", "#").replace("# ", "#").replace(" #", "#")
                     while "##" in name:
                         name = name.replace("##", "#")
                     signal.emit(name.split("#")[0], name.split("#")[-1]+id, ver, newver, "Winget")
             except Exception as e:
                 try:
-                    signal.emit(element[0:idSeparator].strip(), element[idSeparator:verSeparator].strip(), element[verSeparator:newVerSeparator].split(" ")[0].strip(), element[newVerSeparator:].split(" ")[0].strip(), "Winget")
-                except Exception as e:
-                    report(e)
+                    signal.emit(element[0:idSeparator], element[idSeparator:verSeparator], element[verSeparator:newVerSeparator].split(" ")[0], element[newVerSeparator:].split(" ")[0], "Winget")
                 except Exception as e:
                     report(e)
         print("🟢 Winget search finished")
         finishSignal.emit("winget")
 
 def searchForInstalledPackage(signal: Signal, finishSignal: Signal) -> None:
-    print(f"🟢 Starting winget search, winget on {winget}...")
-    p = subprocess.Popen(["mode", "400,30&", winget, "list"] + common_params, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True)
+    print(f"🟢 Starting winget list...")
+    p = subprocess.Popen(f"{winget} list {' '.join(common_params)}", stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True, encoding="utf-8")
     output = []
     counter = 0
     idSeparator = 0
@@ -191,10 +186,10 @@ def searchForInstalledPackage(signal: Signal, finishSignal: Signal) -> None:
         line = p.stdout.readline()
         line = line.strip()
         if line:
-            if(counter > 0 and not b"---" in line):
+            if(counter > 0 and not "---" in line):
                 output.append(line)
             else:
-                l = str(line, encoding='utf-8', errors="ignore").replace("\x08-\x08\\\x08|\x08 \r","")
+                l = str(line, errors="ignore").replace("\x08-\x08\\\x08|\x08 \r","")
                 for char in ("\r", "/", "|", "\\", "-"):
                     l = l.split(char)[-1].strip()
                 if("Id" in l):
@@ -206,7 +201,7 @@ def searchForInstalledPackage(signal: Signal, finishSignal: Signal) -> None:
     wingetName = "Winget"
     for element in output:
         try:
-            element = str(element, "utf-8", errors="ignore")
+            element = str(element, errors="ignore")
             element = element.replace("2010  x", "2010 x").replace("Microsoft.VCRedist.2010", " Microsoft.VCRedist.2010") # Fix an issue with MSVC++ 2010, where it shows with a double space (see https://github.com/marticliment/WingetUI#450)
             verElement = element[idSeparator:].strip()
             verElement.replace("\t", " ")
@@ -234,7 +229,7 @@ def searchForInstalledPackage(signal: Signal, finishSignal: Signal) -> None:
         except Exception as e:
             try:
                 report(e)
-                element = str(element, "utf-8")
+                element = str(element)
                 signal.emit(element[0:idSeparator].strip(), element[idSeparator:].strip(), emptyStr, wingetName)
             except Exception as e:
                 report(e)
@@ -289,7 +284,7 @@ def getInfo(signal: Signal, title: str, id: str, useId: bool) -> None:
                 line = line.strip()
                 cprint(line)
                 if line:
-                    output.append(str(line, encoding='utf-8', errors="ignore"))
+                    output.append(str(line, errors="ignore"))
             print(p.stdout)
             for line in output:
                 cprint(line)
@@ -345,7 +340,7 @@ def getInfo(signal: Signal, title: str, id: str, useId: bool) -> None:
                 line = line.strip()
                 if line:
                     if(counter > 2):
-                        output.append(str(line, encoding='utf-8', errors="ignore"))
+                        output.append(str(line, errors="ignore"))
                     else:
                         counter += 1
             cprint("Output: ")
@@ -363,7 +358,7 @@ def installAssistant(p: subprocess.Popen, closeAndInform: Signal, infoSignal: Si
     while p.poll() is None:
         line = p.stdout.readline()
         line = line.strip()
-        line = str(line, encoding='utf-8', errors="ignore").strip()
+        line = str(line, errors="ignore").strip()
         if line:
             infoSignal.emit(line)
             counter += 1
@@ -383,7 +378,7 @@ def uninstallAssistant(p: subprocess.Popen, closeAndInform: Signal, infoSignal: 
     while p.poll() is None:
         line = p.stdout.readline()
         line = line.strip()
-        line = str(line, encoding='utf-8', errors="ignore").strip()
+        line = str(line, errors="ignore").strip()
         if line:
             infoSignal.emit(line)
             counter += 1
