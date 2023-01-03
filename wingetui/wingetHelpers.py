@@ -8,14 +8,19 @@ common_params = ["--source", "winget", "--accept-source-agreements"]
 
 
 if getSettings("UseSystemWinget"):
-    winget = "winget.exe"
+    winget = "powershell -ExecutionPolicy ByPass -Command winget"
 else:
+    # winget = f"powershell -ExecutionPolicy ByPass {os.path.abspath(f'{realpath}/winget-cli/winget.exe')}"
+    # winget = ".\winget-cli\winget.exe"
     winget = os.path.join(os.path.join(realpath, "winget-cli"), "winget.exe")
 
 
 def searchForPackage(signal: Signal, finishSignal: Signal, noretry: bool = False) -> None:
     print(f"🟢 Starting winget search, winget on {winget}...")
-    p = subprocess.Popen(["mode", "400,30&", winget, "search", ""] + common_params ,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True)
+    print(os.getcwd())
+    print(os.path.abspath(f'{realpath}/winget-cli/'))
+    p = subprocess.Popen([winget, "search"] + common_params, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=realpath, env=os.environ.copy(), shell=True)
+    print(f"xxx {p.stdout.readline()}")
     output = []
     counter = 0
     idSeparator = 0
@@ -89,7 +94,7 @@ def searchForPackage(signal: Signal, finishSignal: Signal, noretry: bool = False
 
 def searchForOnlyOnePackage(id: str) -> tuple[str, str]:
     print(f"🟢 Starting winget search, winget on {winget}...")
-    p = subprocess.Popen(["mode", "400,30&", winget, "search", "--id", id.replace("…", "")] + common_params ,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True)
+    p = subprocess.Popen([winget, "search", "--id", id.replace("…", "")] + common_params ,stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True)
     counter = 0
     idSeparator = 0
     while p.poll() is None:
@@ -114,13 +119,15 @@ def searchForOnlyOnePackage(id: str) -> tuple[str, str]:
 
 def searchForUpdates(signal: Signal, finishSignal: Signal, noretry: bool = False) -> None:
     print(f"🟢 Starting winget search, winget on {winget}...")
-    p = subprocess.Popen(["mode", "400,30&", winget, "upgrade", "--include-unknown"] + common_params[0:2], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True)
+    p = subprocess.Popen([winget, "upgrade", "--include-unknown"] + common_params[0:2], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, env=os.environ.copy(), shell=True)
     output = []
     counter = 0
     idSeparator = 0
+    print(f"abc {p.stdout.readline()}")
     while p.poll() is None:
         line = p.stdout.readline()  # type: ignore
         line = line.strip()
+        print(line)
         if line:
             if(counter > 0):
                 if not b"upgrades available" in line:
@@ -176,14 +183,12 @@ def searchForUpdates(signal: Signal, finishSignal: Signal, noretry: bool = False
                     signal.emit(element[0:idSeparator].strip(), element[idSeparator:verSeparator].strip(), element[verSeparator:newVerSeparator].split(" ")[0].strip(), element[newVerSeparator:].split(" ")[0].strip(), "Winget")
                 except Exception as e:
                     report(e)
-                except Exception as e:
-                    report(e)
         print("🟢 Winget search finished")
         finishSignal.emit("winget")
 
 def searchForInstalledPackage(signal: Signal, finishSignal: Signal) -> None:
     print(f"🟢 Starting winget search, winget on {winget}...")
-    p = subprocess.Popen(["mode", "400,30&", winget, "list"] + common_params, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True)
+    p = subprocess.Popen([winget, "list"] + common_params, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, cwd=os.getcwd(), env=os.environ.copy(), shell=True)
     output = []
     counter = 0
     idSeparator = 0
