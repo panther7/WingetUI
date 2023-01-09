@@ -65,6 +65,7 @@
   "Copy log to clipboard" : "Zkopírovat protokol do schránky",
   "Dark" : "Tmavý",
   "Description:" : "Popis:",
+  "Local PC" : "Místní počítač",
   "Directly install when double-clicking an item on the Discover Software tab (instead of showing the package info)" : "Přimá instalace po dvojkliku na položku v záložce \"Procházet balíčky\" (místo zobrazení informací o balíčku)",
   "Disable Scoop" : "Vypnout Scoop",
   "Disable Winget" : "Vypnout Winget",
